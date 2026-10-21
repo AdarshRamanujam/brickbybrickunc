@@ -8,6 +8,6 @@
 // B) Supabase (always on, no PC needed): fill in the two Supabase lines.
 window.BRICK_CONFIG = {
   apiUrl: "https://airlines-reasoning-getting-wherever.trycloudflare.com/api",
-  supabaseUrl: "https://waulqblgbfcxaxvslhdx.supabase.co/rest/v1/",
+  supabaseUrl: "https://waulqblgbfcxaxvslhdx.supabase.co",
   supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhdWxxYmxnYmZjeGF4dnNsaGR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NTExNjYsImV4cCI6MjEwODEyNzE2Nn0.wooVTB_hVd9Tut9GoBJkX-muMa0D4FRCUilqvvnMAKI"
 };
