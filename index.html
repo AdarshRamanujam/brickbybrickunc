@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UNC Brick Issue Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --carolina: #4b9cd3;
+    --navy: #13294b;
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --text: #1d2733;
+    --muted: #6b7785;
+    --border: #d9dfe7;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--bg); }
+  body { display: flex; flex-direction: column; }
+  header { background: var(--navy); color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; flex: 1 1 auto; }
+  header h1 small { font-weight: 400; opacity: .7; margin-left: 6px; }
+  button { font: inherit; cursor: pointer; }
+  .btn { background: var(--carolina); color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-weight: 600; }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,.45); }
+  .btn.light { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .btn.danger { background: #c0392b; }
+  .btn.small { padding: 5px 10px; font-size: 13px; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #side { width: 320px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  #filters { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  #filters h2, #listHead { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; font-size: 12.5px; background: #fff; user-select: none; cursor: pointer; }
+  .chip.off { opacity: .4; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); display: inline-block; flex: none; }
+  #listWrap { flex: 1; overflow: auto; padding: 10px 12px; }
+  .item { display: flex; gap: 10px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; background: #fff; }
+  .item:hover { border-color: var(--carolina); }
+  .item img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; flex: none; background: #e6eaf0; }
+  .item .t { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
+  .item .m { font-size: 12px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  #empty { color: var(--muted); font-size: 14px; text-align: center; padding: 30px 10px; }
+  #sideFoot { padding: 10px 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+  #mapWrap { flex: 1; position: relative; min-width: 0; }
+  #map { position: absolute; inset: 0; }
+  #banner { display: none; position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1000; background: var(--navy); color: #fff; padding: 10px 16px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.3); font-size: 14px; align-items: center; gap: 12px; }
+  #banner.on { display: flex; }
+  .placing .leaflet-container { cursor: crosshair; }
+
+  /* modal */
+  .overlay { position: fixed; inset: 0; background: rgba(10,20,35,.55); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; }
+  .overlay.on { display: flex; }
+  .overlay.hidden { display: none; }
+  .modal { background: #fff; border-radius: 12px; width: min(720px, 100%); max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+  .modal header { background: none; color: inherit; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .modal header h2 { margin: 0; font-size: 17px; flex: 1; }
+  .modal .body { padding: 16px 18px; overflow: auto; }
+  .modal footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+  .modal footer .status { margin-right: auto; color: var(--muted); font-size: 13px; }
+  .drop { border: 2px dashed var(--carolina); border-radius: 10px; padding: 26px; text-align: center; color: var(--muted); cursor: pointer; background: #f3f9fd; }
+  .drop.drag { background: #e4f2fb; }
+  .drop b { color: var(--text); display: block; font-size: 15px; margin-bottom: 4px; }
+  .draft { display: flex; gap: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; }
+  .draft.bad { border-color: #c0392b; background: #fff6f5; }
+  .draft img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; background: #e6eaf0; flex: none; }
+  .draft .f { flex: 1; min-width: 0; display: grid; gap: 6px; }
+  .draft label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px; }
+  select, textarea, input[type=text], input[type=password] { width: 100%; font: inherit; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); }
+  textarea { resize: vertical; min-height: 44px; }
+  .loc { font-size: 12.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .loc.ok { color: #1e7e34; }
+  .loc.warn { color: #b45309; }
+  .loc.err { color: #c0392b; }
+  .rm { background: none; border: 0; color: var(--muted); font-size: 20px; line-height: 1; align-self: flex-start; }
+  .rm:hover { color: #c0392b; }
+
+  /* popup */
+  .leaflet-popup-content { margin: 10px; width: 250px !important; }
+  .pop img.ph { width: 100%; height: 150px; object-fit: cover; border-radius: 6px; cursor: zoom-in; background: #e6eaf0; display: block; }
+  .pop .row { margin-top: 8px; }
+  .pop .meta { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .pop .acts { display: flex; gap: 6px; margin-top: 8px; }
+  #lightbox { background: rgba(0,0,0,.88); }
+  #lightbox img { max-width: 96vw; max-height: 92vh; border-radius: 6px; }
+  #lightbox .x { position: absolute; top: 12px; right: 18px; color: #fff; font-size: 34px; background: none; border: 0; }
+  .legend-note { font-size: 12px; color: var(--muted); padding: 0 12px 10px; }
+
+  @media (max-width: 760px) {
+    main { flex-direction: column-reverse; }
+    #side { width: 100%; height: 38%; border-right: 0; border-top: 1px solid var(--border); }
+    #mapWrap { flex: 1 1 62%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>UNC Brick Issue Map <small>Chapel Hill campus</small></h1>
+  <button class="btn ghost" id="btnAuth" hidden>Editor sign in</button>
+  <button class="btn" id="btnUpload">⬆ Add photos</button>
+</header>
+
+<main>
+  <aside id="side">
+    <div id="filters">
+      <h2>Filter by issue type</h2>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div id="listWrap">
+      <div id="listHead">Reports <span id="count"></span></div>
+      <div id="list"></div>
+      <div id="empty">No reports yet.<br>Tap <b>Add photos</b> to log a brick problem.</div>
+    </div>
+    <div class="legend-note">Data is stored in this browser only. Use the export buttons to share or back up.</div>
+    <div id="sideFoot">
+      <button class="btn light small" id="btnCsv">Export CSV</button>
+      <button class="btn light small" id="btnGeo">Export GeoJSON</button>
+    </div>
+  </aside>
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div id="banner"><span id="bannerText">Click the map to place the photo</span><button class="btn small ghost" id="bannerCancel">Cancel</button></div>
+  </div>
+</main>
+
+<!-- Upload modal -->
+<div class="overlay" id="upOverlay">
+  <div class="modal">
+    <header><h2>Add photos</h2><button class="rm" id="upClose" aria-label="Close">✕</button></header>
+    <div class="body">
+      <div class="drop" id="drop">
+        <b>Tap to choose photos, or drop them here</b>
+        JPEG photos with GPS (location) data are placed on the map automatically.
+        <input type="file" id="file" accept="image/*" multiple hidden>
+      </div>
+      <div id="drafts"></div>
+    </div>
+    <footer>
+      <span class="status" id="upStatus"></span>
+      <button class="btn light" id="upCancel">Cancel</button>
+      <button class="btn" id="upSave" disabled>Save to map</button>
+    </footer>
+  </div>
+</div>
+
+<!-- Editor sign in -->
+<div class="overlay" id="authOverlay">
+  <div class="modal" style="width:min(380px,100%)">
+    <header><h2>Editor sign in</h2><button class="rm" id="authClose" aria-label="Close">✕</button></header>
+    <div class="body" style="display:grid;gap:10px">
+      <div><label style="font-size:12px;color:var(--muted)">Email</label><input type="text" id="authEmail" autocomplete="username"></div>
+      <div><label style="font-size:12px;color:var(--muted)">Password</label><input type="password" id="authPass" autocomplete="current-password"></div>
+      <div class="loc err" id="authErr"></div>
+    </div>
+    <footer><button class="btn" id="authGo">Sign in</button></footer>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="overlay" id="lightbox"><button class="x" id="lbClose" aria-label="Close">×</button><img id="lbImg" alt=""></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Config ----------
+  // Approximate rectangle around the UNC-Chapel Hill campus (North, Main, and South Campus,
+  // Dean Smith Center, Kenan Stadium and the hospitals). Edit these four numbers to adjust.
+  const BOUNDS = L.latLngBounds([35.8965, -79.0730], [35.9175, -79.0400]);
+
+  const ISSUE_TYPES = [
+    { id: 'loose',    label: 'Loose brick',            color: '#e67e22' },
+    { id: 'missing',  label: 'Missing brick',          color: '#c0392b' },
+    { id: 'cracked',  label: 'Cracked / broken brick', color: '#8e44ad' },
+    { id: 'uneven',   label: 'Uneven / sunken surface',color: '#2980b9' },
+    { id: 'heaved',   label: 'Heaved by roots',        color: '#27ae60' },
+    { id: 'mortar',   label: 'Mortar / grout failure', color: '#d4a017' },
+    { id: 'drainage', label: 'Standing water / drainage', color: '#16a5a5' },
+    { id: 'other',    label: 'Other',                  color: '#7f8c8d' }
+  ];
+  const TYPE = Object.fromEntries(ISSUE_TYPES.map(t => [t.id, t]));
+
+  // ---------- Storage ----------
+  // With config.js filled in, reports and photos are shared through Supabase.
+  // Without it, everything is kept in this browser (IndexedDB).
+  const cfg = window.BRICK_CONFIG || {};
+  const remote = !!(cfg.supabaseUrl && cfg.supabaseKey && window.supabase);
+  const api = (!remote && cfg.apiUrl) ? String(cfg.apiUrl).replace(/\/+$/, '') : '';
+  const server = !!api;          // photos and reports kept by server.js
+  const shared = remote || server;
+  const BUCKET = 'brick-photos';
+  let sb = null, session = null;
+  if (remote) sb = supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
+  const canEdit = () => !shared || !!session;
+
+  let db;
+  function openDB() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('unc-brick-map', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('reports', { keyPath: 'id' });
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  const tx = (mode) => db.transaction('reports', mode).objectStore('reports');
+  const dbAll = () => new Promise((res, rej) => { const q = tx('readonly').getAll(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+  const dbPut = (rec) => new Promise((res, rej) => { const q = tx('readwrite').put(rec); q.onsuccess = () => res(); q.onerror = () => rej(q.error); });
+  const dbDel = (id) => new Promise((res, rej) => { const q = tx('readwrite').delete(id); q.onsuccess = () => res(); q.onerror = () => rej(q.error); });
+
+  const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+  function fromRow(x) {
+    return { id: x.id, type: x.type, notes: x.notes || '', lat: x.lat, lng: x.lng, taken: x.taken,
+      added: new Date(x.created_at).getTime(), source: x.source, name: x.name,
+      photoPath: x.photo_path, thumbPath: x.thumb_path, thumb: pubUrl(x.thumb_path), full: pubUrl(x.photo_path) };
+  }
+
+  let adminKey = '';
+  try { adminKey = sessionStorage.getItem('brickAdmin') || ''; } catch (e) { /* ignore */ }
+  const apiOrigin = server ? new URL(api, location.href).origin : '';
+  async function apiFetch(p, opt = {}) {
+    const r = await fetch(api + p, { ...opt, headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey, 'ngrok-skip-browser-warning': '1', ...(opt.headers || {}) } });
+    if (!r.ok) {
+      let m = ''; try { m = (await r.json()).error; } catch (e) { /* no body */ }
+      throw new Error(m || ('Server said ' + r.status));
+    }
+    return r.status === 204 ? null : r.json();
+  }
+  const fromServer = (x) => ({ ...x, notes: x.notes || '', added: new Date(x.created_at).getTime(), thumb: apiOrigin + x.thumb, full: apiOrigin + x.full });
+
+  const store = {
+    async init() { if (!shared) db = await openDB(); },
+    async all() {
+      if (server) return (await apiFetch('/reports')).map(fromServer);
+      if (!remote) return dbAll();
+      const { data, error } = await sb.from('reports').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data.map(fromRow);
+    },
+    async add(rec, comp) {            // comp = { dataUrl, blob }: the compressed photo
+      if (server) {
+        const out = await apiFetch('/reports', { method: 'POST', body: JSON.stringify({
+          type: rec.type, notes: rec.notes, lat: rec.lat, lng: rec.lng, taken: rec.taken, source: rec.source, name: rec.name,
+          thumb: rec.thumb, image: comp.dataUrl }) });
+        rec.id = out.id; return;
+      }
+      if (!remote) return dbPut(rec);
+      rec.photoPath = `${rec.id}/photo.jpg`; rec.thumbPath = `${rec.id}/thumb.jpg`;
+      let r = await sb.storage.from(BUCKET).upload(rec.photoPath, comp.blob, { contentType: 'image/jpeg' });
+      if (r.error) throw r.error;
+      const tb = await (await fetch(rec.thumb)).blob();
+      r = await sb.storage.from(BUCKET).upload(rec.thumbPath, tb, { contentType: 'image/jpeg' });
+      if (r.error) throw r.error;
+      r = await sb.from('reports').insert({ id: rec.id, type: rec.type, notes: rec.notes, lat: rec.lat, lng: rec.lng,
+        taken: rec.taken, source: rec.source, name: rec.name, photo_path: rec.photoPath, thumb_path: rec.thumbPath });
+      if (r.error) throw r.error;
+    },
+    async update(rec) {
+      if (server) { await apiFetch('/reports/' + rec.id, { method: 'PATCH', body: JSON.stringify({ type: rec.type, notes: rec.notes }) }); return; }
+      if (!remote) return dbPut(rec);
+      const { error } = await sb.from('reports').update({ type: rec.type, notes: rec.notes }).eq('id', rec.id);
+      if (error) throw error;
+    },
+    async remove(rec) {
+      if (server) { await apiFetch('/reports/' + rec.id, { method: 'DELETE' }); return; }
+      if (!remote) return dbDel(rec.id);
+      let r = await sb.from('reports').delete().eq('id', rec.id);
+      if (r.error) throw r.error;
+      await sb.storage.from(BUCKET).remove([rec.photoPath, rec.thumbPath]);
+    }
+  };
+
+  // ---------- Map ----------
+  const map = L.map('map', { maxBoundsViscosity: 1.0, zoomSnap: 0.5, maxZoom: 20 });
+  // Free satellite imagery. Esri World Imagery is the default (sharpest here);
+  // USGS imagery is public domain and is offered as an alternative.
+  const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, maxNativeZoom: 19, attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics'
+  });
+  const usgs = L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, maxNativeZoom: 16, attribution: 'Imagery: USGS The National Map'
+  });
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 20, maxNativeZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+  });
+  const labels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, maxNativeZoom: 19, attribution: 'Labels &copy; Esri'
+  });
+  sat.addTo(map);
+  L.control.layers({ 'Satellite (Esri)': sat, 'Satellite (USGS, public domain)': usgs, 'Street map': osm },
+    { 'Place labels': labels }, { position: 'topright' }).addTo(map);
+
+  map.fitBounds(BOUNDS);
+  map.setMaxBounds(BOUNDS.pad(0.04));
+  map.setMinZoom(map.getBoundsZoom(BOUNDS) - 0.5);
+
+  // Dim everything outside the campus boundary and outline the boundary.
+  const world = [[-90, -180], [-90, 180], [90, 180], [90, -180]];
+  const hole = [BOUNDS.getSouthWest(), BOUNDS.getNorthWest(), BOUNDS.getNorthEast(), BOUNDS.getSouthEast()];
+  L.polygon([world, hole], { stroke: false, fillColor: '#13294b', fillOpacity: 0.35, interactive: false }).addTo(map);
+  L.rectangle(BOUNDS, { color: '#ffd24a', weight: 2.5, dashArray: '7 7', fill: false, interactive: false }).addTo(map);
+
+  // ---------- State ----------
+  let reports = [];           // saved records
+  const markers = new Map();  // id -> L.circleMarker
+  const hiddenTypes = new Set();
+
+  // ---------- Helpers ----------
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown';
+  const $ = (id) => document.getElementById(id);
+
+  function typeOptions(selected, withBlank) {
+    return (withBlank ? '<option value="">Choose issue type…</option>' : '') +
+      ISSUE_TYPES.map(t => `<option value="${t.id}" ${t.id === selected ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
+  }
+
+  async function makeThumb(file, max = 320, quality = 0.8) {
+    let bmp;
+    try {
+      bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch (e) {
+      const url = URL.createObjectURL(file);
+      try {
+        bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+      } finally { setTimeout(() => URL.revokeObjectURL(url), 5000); }
+    }
+    const w = bmp.width || bmp.naturalWidth, h = bmp.height || bmp.naturalHeight;
+    const s = Math.min(1, max / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * s); c.height = Math.round(h * s);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', quality);
+  }
+
+  async function readExif(file) {
+    const out = { lat: null, lng: null, taken: null };
+    try {
+      const g = await exifr.gps(file);
+      if (g && Number.isFinite(g.latitude) && Number.isFinite(g.longitude)) { out.lat = g.latitude; out.lng = g.longitude; }
+    } catch (e) { /* no GPS */ }
+    try {
+      const d = await exifr.parse(file, { pick: ['DateTimeOriginal', 'CreateDate'] });
+      const t = d && (d.DateTimeOriginal || d.CreateDate);
+      if (t instanceof Date && !isNaN(t)) out.taken = t.toISOString();
+    } catch (e) { /* no date */ }
+    if (!out.taken && file.lastModified) out.takenFallback = new Date(file.lastModified).toISOString();
+    return out;
+  }
+
+  // ---------- Markers / list ----------
+  function pinStyle(r) {
+    return { radius: 9, color: '#fff', weight: 2.5, fillColor: (TYPE[r.type] || TYPE.other).color, fillOpacity: 1 };
+  }
+
+  function popupHtml(r) {
+    const ed = canEdit();
+    return `<div class="pop" data-id="${r.id}">
+      <img class="ph" src="${r.thumb}" alt="Brick issue photo" data-act="zoom">
+      <div class="row"><select data-act="type" ${ed ? '' : 'disabled'}>${typeOptions(r.type, false)}</select></div>
+      <div class="row"><textarea data-act="notes" placeholder="Notes (optional)" ${ed ? '' : 'disabled'}>${esc(r.notes)}</textarea></div>
+      <div class="meta">Taken: ${esc(fmtDate(r.taken))}<br>${r.lat.toFixed(6)}, ${r.lng.toFixed(6)} · ${r.source === 'exif' ? 'from photo EXIF' : 'placed manually'}<br><a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">Open in Google Maps</a></div>
+      ${ed ? `<div class="acts">
+        <button class="btn small" data-act="save">Save changes</button>
+        <button class="btn small danger" data-act="delete">Delete</button>
+      </div>` : ''}
+    </div>`;
+  }
+
+  function addMarker(r) {
+    const m = L.circleMarker([r.lat, r.lng], pinStyle(r));
+    m.bindPopup(() => popupHtml(r));
+    m.bindTooltip(() => '<img src="' + r.thumb + '" alt="" style="width:120px;height:90px;object-fit:cover;display:block;border-radius:4px"><b>' + esc((TYPE[r.type] || TYPE.other).label) + '</b>',
+      { direction: 'top', offset: [0, -8], opacity: 1 });
+    markers.set(r.id, m);
+    if (!hiddenTypes.has(r.type)) m.addTo(map);
+  }
+
+  function refreshMarker(r) {
+    const m = markers.get(r.id);
+    if (!m) return;
+    m.setStyle(pinStyle(r));
+    if (hiddenTypes.has(r.type)) map.removeLayer(m); else m.addTo(map);
+  }
+
+  function renderChips() {
+    const counts = {};
+    reports.forEach(r => counts[r.type] = (counts[r.type] || 0) + 1);
+    $('chips').innerHTML = ISSUE_TYPES.map(t =>
+      `<span class="chip ${hiddenTypes.has(t.id) ? 'off' : ''}" data-type="${t.id}"><span class="dot" style="background:${t.color}"></span>${esc(t.label)} (${counts[t.id] || 0})</span>`
+    ).join('');
+  }
+
+  function renderList() {
+    const visible = reports.filter(r => !hiddenTypes.has(r.type)).sort((a, b) => b.added - a.added);
+    $('count').textContent = `(${visible.length}${visible.length !== reports.length ? ' of ' + reports.length : ''})`;
+    $('empty').style.display = reports.length ? 'none' : 'block';
+    $('list').innerHTML = visible.map(r => {
+      const t = TYPE[r.type] || TYPE.other;
+      return `<div class="item" data-id="${r.id}">
+        <img src="${r.thumb}" alt="">
+        <div><div class="t"><span class="dot" style="background:${t.color}"></span>${esc(t.label)}</div>
+        <div class="m">${esc(r.notes || fmtDate(r.taken))}</div></div></div>`;
+    }).join('');
+  }
+
+  function renderAll() { renderChips(); renderList(); }
+
+  $('chips').addEventListener('click', (e) => {
+    const c = e.target.closest('.chip'); if (!c) return;
+    const t = c.dataset.type;
+    if (hiddenTypes.has(t)) hiddenTypes.delete(t); else hiddenTypes.add(t);
+    reports.forEach(refreshMarker);
+    renderAll();
+  });
+
+  $('list').addEventListener('click', (e) => {
+    const it = e.target.closest('.item'); if (!it) return;
+    const m = markers.get(it.dataset.id); if (!m) return;
+    map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 18), { duration: 0.6 });
+    map.once('moveend', () => m.openPopup());
+  });
+
+  // Popup actions (delegated, since popup HTML is created on open)
+  map.getContainer().addEventListener('click', async (e) => {
+    const el = e.target.closest('[data-act]'); if (!el) return;
+    const pop = el.closest('.pop'); if (!pop) return;
+    const r = reports.find(x => x.id === pop.dataset.id); if (!r) return;
+    const act = el.dataset.act;
+    if (act === 'zoom') {
+      let src = r.full, tmp = '';
+      if (!src && r.blob) { src = tmp = URL.createObjectURL(r.blob); }
+      if (!src) return;
+      $('lbImg').src = src; $('lightbox').classList.add('on');
+      $('lightbox').dataset.url = tmp;
+    } else if (act === 'save') {
+      r.type = pop.querySelector('[data-act=type]').value;
+      r.notes = pop.querySelector('[data-act=notes]').value.trim();
+      try { await store.update(r); } catch (err) { alert('Could not save: ' + (err.message || err)); return; }
+      refreshMarker(r); renderAll();
+      markers.get(r.id).closePopup();
+    } else if (act === 'delete') {
+      if (!confirm('Delete this report and its photo?')) return;
+      try { await store.remove(r); } catch (err) { alert('Could not delete: ' + (err.message || err)); return; }
+      map.removeLayer(markers.get(r.id)); markers.delete(r.id);
+      reports = reports.filter(x => x.id !== r.id);
+      renderAll();
+    }
+  });
+
+  function closeLightbox() {
+    const lb = $('lightbox'); lb.classList.remove('on');
+    if (lb.dataset.url) { URL.revokeObjectURL(lb.dataset.url); lb.dataset.url = ''; }
+    $('lbImg').src = '';
+  }
+  $('lbClose').onclick = closeLightbox;
+  $('lightbox').addEventListener('click', (e) => { if (e.target === $('lightbox')) closeLightbox(); });
+
+  // ---------- Upload flow ----------
+  let drafts = [];
+  let placingDraft = null;
+
+  const openUpload = () => { $('upOverlay').classList.add('on'); };
+  const closeUpload = () => { $('upOverlay').classList.remove('on'); drafts = []; renderDrafts(); };
+
+  $('btnUpload').onclick = openUpload;
+  $('upClose').onclick = closeUpload;
+  $('upCancel').onclick = closeUpload;
+  $('drop').addEventListener('click', () => $('file').click());
+  $('drop').addEventListener('dragover', (e) => { e.preventDefault(); $('drop').classList.add('drag'); });
+  $('drop').addEventListener('dragleave', () => $('drop').classList.remove('drag'));
+  $('drop').addEventListener('drop', (e) => { e.preventDefault(); $('drop').classList.remove('drag'); addFiles(e.dataTransfer.files); });
+  $('file').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
+
+  async function addFiles(fileList) {
+    const files = [...fileList].filter(f => f.type.startsWith('image/') || /\.(jpe?g|heic|heif|png)$/i.test(f.name));
+    if (!files.length) return;
+    $('upStatus').textContent = 'Reading photos…';
+    for (const file of files) {
+      const d = { key: uid(), file, thumb: '', type: '', notes: '', lat: null, lng: null, taken: null, source: 'exif', outside: false, thumbFailed: false };
+      try { d.thumb = await makeThumb(file); } catch (e) { d.thumbFailed = true; }
+      const ex = await readExif(file);
+      d.taken = ex.taken || ex.takenFallback || null;
+      if (ex.lat !== null) {
+        if (BOUNDS.contains([ex.lat, ex.lng])) { d.lat = ex.lat; d.lng = ex.lng; }
+        else { d.outside = true; d.exifLat = ex.lat; d.exifLng = ex.lng; }
+      }
+      drafts.push(d);
+    }
+    $('upStatus').textContent = '';
+    renderDrafts();
+  }
+
+  function renderDrafts() {
+    $('drafts').innerHTML = drafts.map(d => {
+      let loc;
+      if (d.lat !== null) {
+        loc = `<div class="loc ok">📍 ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)} (${d.source === 'exif' ? 'from photo EXIF' : 'placed on map'}) <button class="btn light small" data-a="place" data-k="${d.key}">Move</button></div>`;
+      } else if (d.outside) {
+        loc = `<div class="loc err">⚠ Photo GPS is outside the UNC campus boundary. <button class="btn light small" data-a="place" data-k="${d.key}">Place on map</button></div>`;
+      } else {
+        loc = `<div class="loc warn">No GPS data in this photo. <button class="btn light small" data-a="place" data-k="${d.key}">Place on map</button></div>`;
+      }
+      const img = d.thumb ? `<img src="${d.thumb}" alt="">` : `<img alt="" style="object-fit:contain" src="data:image/svg+xml,${encodeURIComponent('<svg xmlns=%22http://www.w3.org/2000/svg%22/>')}">`;
+      return `<div class="draft ${d.bad ? 'bad' : ''}" data-k="${d.key}">
+        ${img}
+        <div class="f">
+          <div><label>Issue type</label><select data-a="type">${typeOptions(d.type, true)}</select></div>
+          <div><label>Notes (optional)</label><textarea data-a="notes" placeholder="e.g. outside Davis Library, near the steps">${esc(d.notes)}</textarea></div>
+          ${loc}
+          <div class="loc" style="color:var(--muted)">${esc(d.file.name)} · taken ${esc(fmtDate(d.taken))}${d.thumbFailed ? ' · preview unavailable (try JPEG)' : ''}</div>
+        </div>
+        <button class="rm" data-a="rm" data-k="${d.key}" aria-label="Remove">✕</button>
+      </div>`;
+    }).join('');
+    $('upSave').disabled = drafts.length === 0;
+    $('upSave').textContent = drafts.length > 1 ? `Save ${drafts.length} to map` : 'Save to map';
+  }
+
+  $('drafts').addEventListener('input', (e) => {
+    const row = e.target.closest('.draft'); if (!row) return;
+    const d = drafts.find(x => x.key === row.dataset.k); if (!d) return;
+    if (e.target.dataset.a === 'type') { d.type = e.target.value; if (d.type) { d.bad = false; row.classList.remove('bad'); } }
+    if (e.target.dataset.a === 'notes') d.notes = e.target.value;
+  });
+  $('drafts').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const d = drafts.find(x => x.key === b.dataset.k); if (!d) return;
+    if (b.dataset.a === 'rm') { drafts = drafts.filter(x => x !== d); renderDrafts(); }
+    if (b.dataset.a === 'place') startPlacing(d);
+  });
+
+  function startPlacing(d) {
+    placingDraft = d;
+    $('upOverlay').classList.remove('on');
+    document.body.classList.add('placing');
+    $('banner').classList.add('on');
+    $('bannerText').textContent = 'Click the map where this photo was taken (inside the dashed campus boundary)';
+    map.fitBounds(BOUNDS);
+  }
+  function stopPlacing() {
+    placingDraft = null;
+    document.body.classList.remove('placing');
+    $('banner').classList.remove('on');
+    $('upOverlay').classList.add('on');
+  }
+  $('bannerCancel').onclick = stopPlacing;
+  map.on('click', (e) => {
+    if (!placingDraft) return;
+    if (!BOUNDS.contains(e.latlng)) { $('bannerText').textContent = 'That is outside the campus boundary. Click inside the dashed outline.'; return; }
+    placingDraft.lat = e.latlng.lat; placingDraft.lng = e.latlng.lng;
+    placingDraft.source = 'manual'; placingDraft.outside = false;
+    stopPlacing(); renderDrafts();
+  });
+
+  $('upSave').onclick = async () => {
+    let ok = true;
+    drafts.forEach(d => { d.bad = !d.type || d.lat === null; if (d.bad) ok = false; });
+    if (!ok) { renderDrafts(); $('upStatus').textContent = 'Each photo needs an issue type and a location.'; return; }
+    $('upSave').disabled = true;
+    let firstRec = null;
+    for (const d of drafts) {
+      if (!d.thumb) { try { d.thumb = await makeThumb(d.file); } catch (e) { alert(`Could not read ${d.file.name}. Try a JPEG.`); continue; } }
+      const rec = { id: uid(), type: d.type, notes: d.notes.trim(), lat: d.lat, lng: d.lng, taken: d.taken, added: Date.now(), source: d.source, name: d.file.name, thumb: d.thumb };
+      $('upStatus').textContent = 'Saving ' + d.file.name + '…';
+      let comp;
+      try { const du = await makeThumb(d.file, 1280, 0.7); comp = { dataUrl: du, blob: await (await fetch(du)).blob() }; }
+      catch (err) { alert('Could not compress ' + d.file.name + '. Try a JPEG.'); continue; }
+      rec.blob = comp.blob;   // compressed copy (about 150-400 KB); GPS is already saved in lat/lng
+      try { await store.add(rec, comp); }
+      catch (err) { alert('Could not save ' + d.file.name + ': ' + (err.message || err)); continue; }
+      reports.push(rec); addMarker(rec);
+      firstRec = firstRec || rec;
+    }
+    drafts = []; renderDrafts(); $('upStatus').textContent = '';
+    $('upOverlay').classList.remove('on');
+    renderAll();
+    if (firstRec) {
+      map.flyTo([firstRec.lat, firstRec.lng], Math.max(map.getZoom(), 18), { duration: 0.6 });
+      map.once('moveend', () => { const m = markers.get(firstRec.id); if (m) m.openPopup(); });
+    }
+  };
+
+  // ---------- Export ----------
+  function download(name, text, mime) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  $('btnCsv').onclick = () => {
+    if (!reports.length) return alert('Nothing to export yet.');
+    const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const rows = [['id', 'issue_type', 'notes', 'latitude', 'longitude', 'photo_taken', 'location_source', 'filename'].join(',')];
+    reports.forEach(r => rows.push([r.id, TYPE[r.type]?.label, r.notes, r.lat, r.lng, r.taken, r.source, r.name].map(q).join(',')));
+    download('unc-brick-reports.csv', rows.join('\n'), 'text/csv');
+  };
+  $('btnGeo').onclick = () => {
+    if (!reports.length) return alert('Nothing to export yet.');
+    const fc = { type: 'FeatureCollection', features: reports.map(r => ({
+      type: 'Feature', geometry: { type: 'Point', coordinates: [r.lng, r.lat] },
+      properties: { id: r.id, issue_type: TYPE[r.type]?.label, notes: r.notes, photo_taken: r.taken, location_source: r.source, filename: r.name }
+    })) };
+    download('unc-brick-reports.geojson', JSON.stringify(fc, null, 2), 'application/geo+json');
+  };
+
+  // ---------- Editor sign in (shared mode only) ----------
+  function refreshAuthUi() {
+    $('btnAuth').textContent = session ? 'Sign out' : 'Editor sign in';
+    markers.forEach(m => m.closePopup());
+  }
+  async function setupAuth() {
+    $('btnAuth').hidden = false;
+    if (server) {                       // password-only editor mode
+      $('authEmail').closest('div').hidden = true;
+      $('authOverlay').querySelector('h2').textContent = 'Editor password';
+      if (adminKey) { try { await apiFetch('/check'); session = {}; } catch (e) { adminKey = ''; } }
+      refreshAuthUi();
+      const closeAuth = () => $('authOverlay').classList.remove('on');
+      $('authClose').onclick = closeAuth;
+      $('btnAuth').onclick = () => {
+        if (session) { session = null; adminKey = ''; try { sessionStorage.removeItem('brickAdmin'); } catch (e) { /* ignore */ } refreshAuthUi(); return; }
+        $('authErr').textContent = ''; $('authOverlay').classList.add('on');
+      };
+      $('authGo').onclick = async () => {
+        adminKey = $('authPass').value;
+        try { await apiFetch('/check'); session = {}; try { sessionStorage.setItem('brickAdmin', adminKey); } catch (e) { /* ignore */ } $('authPass').value = ''; closeAuth(); refreshAuthUi(); }
+        catch (e) { adminKey = ''; $('authErr').textContent = 'Wrong password, or editing is switched off on the server.'; }
+      };
+      return;
+    }
+    const { data } = await sb.auth.getSession();
+    session = data.session; refreshAuthUi();
+    sb.auth.onAuthStateChange((_e, s) => { session = s; refreshAuthUi(); });
+    $('btnAuth').onclick = async () => {
+      if (session) { await sb.auth.signOut(); return; }
+      $('authErr').textContent = ''; $('authOverlay').classList.add('on');
+    };
+    $('authClose').onclick = () => $('authOverlay').classList.remove('on');
+    $('authGo').onclick = async () => {
+      const { error } = await sb.auth.signInWithPassword({ email: $('authEmail').value.trim(), password: $('authPass').value });
+      if (error) { $('authErr').textContent = error.message; return; }
+      $('authPass').value = ''; $('authOverlay').classList.remove('on');
+    };
+  }
+
+  // ---------- Init ----------
+  (async function init() {
+    document.querySelector('.legend-note').textContent = shared
+      ? 'Reports are shared: everyone who opens this site sees the same map.'
+      : 'Data is stored in this browser only. Use the export buttons to share or back up.';
+    try {
+      await store.init();
+      reports = await store.all();
+      reports.forEach(addMarker);
+    } catch (e) {
+      alert('Could not load reports: ' + (e.message || e));
+    }
+    renderAll();
+    if (shared) setupAuth();
+  })();
+})();
+</script>
+</body>
+</html>
