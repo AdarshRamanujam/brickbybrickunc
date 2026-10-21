@@ -613,6 +613,7 @@
   // ---------- Editor sign in (shared mode only) ----------
   function refreshAuthUi() {
     $('btnAuth').textContent = session ? 'Sign out' : 'Editor sign in';
+    $('btnUpload').hidden = shared && !session;   // only signed-in editors can add photos
     markers.forEach(m => m.closePopup());
   }
   async function setupAuth() {
@@ -652,8 +653,9 @@
 
   // ---------- Init ----------
   (async function init() {
+    if (shared) { $('btnUpload').hidden = true; $('empty').textContent = 'No reports yet.'; }
     document.querySelector('.legend-note').textContent = shared
-      ? 'Reports are shared: everyone who opens this site sees the same map.'
+      ? 'Everyone can view the map. Signed-in editors add and manage reports.'
       : 'Data is stored in this browser only. Use the export buttons to share or back up.';
     try {
       await store.init();
